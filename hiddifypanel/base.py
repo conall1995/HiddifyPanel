@@ -65,6 +65,8 @@ def create_app(cli=False, **config):
             return
         if "/api/v1/" in request.base_url:
             return
+        if "/api/manage/v1/" in request.base_url:
+            return
         csrf.protect()
 
     app.jinja_env.globals['get_locale'] = get_locale

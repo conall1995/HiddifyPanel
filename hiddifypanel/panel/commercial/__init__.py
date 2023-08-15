@@ -10,7 +10,9 @@ commercial = False
 
 def init_app(app):
     from . import restapi
+    from . import managment_restapi
     restapi.init_app(app)
+    managment_restapi.init_app(app)
     return
 
 
