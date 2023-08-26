@@ -1,4 +1,5 @@
 import socket
+from hiddifypanel.cache import cache
 from sqlalchemy.orm import Load
 import glob
 import json
@@ -90,18 +91,22 @@ def asset_url(path):
     return f"/{g.proxy_path}/{path}"
 
 
-def get_direct_host_or_ip(version):
+@cache.cache(ttl=600)
+def get_direct_host_or_ip(prefer_version):
     direct = Domain.query.filter(Domain.mode == DomainType.direct, Domain.sub_link_only == False).first()
     if not (direct):
         direct = Domain.query.filter(Domain.mode == DomainType.direct).first()
     if direct:
         direct = direct.domain
     else:
-        direct = get_ip(version)
+        direct = get_ip(prefer_version)
+    if not direct:
+        direct = get_ip(4 if prefer_version == 6 else 6)
     return direct
 
 
-def get_ip(version, retry=3):
+@cache.cache(ttl=600)
+def get_ip(version, retry=5):
     ips = get_interface_public_ip(version)
     ip = None
     if (ips):
@@ -168,6 +173,7 @@ def get_interface_public_ip(version):
         return None
 
 
+@cache.cache(ttl=300)
 def get_available_proxies(child_id):
     proxies = Proxy.query.filter(Proxy.child_id == child_id).all()
     proxies = [c for c in proxies if 'restls' not in c.transport]
@@ -231,6 +237,7 @@ def flash_config_success(restart_mode='', domain_changed=True):
 # Function to display hostname and
 # IP address
 
+
 def get_domain_ip(dom, retry=3):
 
     res = None
@@ -247,7 +254,7 @@ def get_domain_ip(dom, retry=3):
 
     if not res:
         try:
-            res = socket.getaddrinfo(dom, None, socket.AF_INET6)[0][4][0]
+            res = f"[{socket.getaddrinfo(dom, None, socket.AF_INET6)[0][4][0]}]"
         except:
             pass
 
@@ -354,6 +361,7 @@ def reinstall_action(complete_install=False, domain_change=False):
 def check_need_reset(old_configs, do=False):
     restart_mode = ''
     for c in old_configs:
+        # c=ConfigEnum(c)
         if old_configs[c] != hconfig(c) and c.apply_mode():
             if restart_mode != 'reinstall':
                 restart_mode = c.apply_mode()
@@ -645,14 +653,17 @@ def debug_flash_if_not_in_the_same_asn(domain):
     from hiddifypanel.panel.clean_ip import ipasn
     ipv4 = get_ip(4)
     dip = get_domain_ip(domain)
-    if ipasn:
-        asn_ipv4 = ipasn.get(ipv4)
-        asn_dip = ipasn.get(dip)
-        # country_ipv4= ipcountry.get(ipv4)
-        # country_dip= ipcountry.get(dip)
-        if asn_ipv4.get('autonomous_system_organization') != asn_dip.get('autonomous_system_organization'):
-            flash(_("selected domain for REALITY is not in the same ASN. To better use of the protocol, it is better to find a domain in the same ASN.") +
-                  f"<br> Server ASN={asn_ipv4.get('autonomous_system_organization','unknown')}<br>{domain}_ASN={asn_dip.get('autonomous_system_organization','unknown')}", "warning")
+    try:
+        if ipasn:
+            asn_ipv4 = ipasn.get(ipv4)
+            asn_dip = ipasn.get(dip)
+            # country_ipv4= ipcountry.get(ipv4)
+            # country_dip= ipcountry.get(dip)
+            if asn_ipv4.get('autonomous_system_organization') != asn_dip.get('autonomous_system_organization'):
+                flash(_("selected domain for REALITY is not in the same ASN. To better use of the protocol, it is better to find a domain in the same ASN.") +
+                      f"<br> Server ASN={asn_ipv4.get('autonomous_system_organization','unknown')}<br>{domain}_ASN={asn_dip.get('autonomous_system_organization','unknown')}", "warning")
+    except:
+        pass
 
 
 def fallback_domain_compatible_with_servernames(fallback_domain, servername):
@@ -661,9 +672,15 @@ def fallback_domain_compatible_with_servernames(fallback_domain, servername):
 
 def generate_x25519_keys():
     # Run the "xray x25519" command and capture its output
-    cmd = "xray x25519"
-    output = subprocess.check_output(cmd, shell=True, text=True)
-    # Extract the private and public keys from the output
+    try:
+        cmd = "xray x25519"
+        output = subprocess.check_output(cmd, shell=True, text=True)
+    except:
+        output = """
+        Private key: ILnwK6Ii9PWgnkq5Lbb8G_chyP4ba5cGRpZbaJjf7lg
+        Public key: no36JbbL8uPH4VT2PNe9husJBN2mu5DbgDASH7hK32A
+        """
+        # Extract the private and public keys from the output
     private_key = output.split("Private key: ")[1].split("\n")[0]
     public_key = output.split("Public key: ")[1].split("\n")[0]
 
@@ -706,3 +723,9 @@ def get_ed25519_private_public_pair():
         format=serialization.PublicFormat.OpenSSH,
     )
     return priv_bytes.decode(), pub_bytes.decode()
+
+
+def do_base_64(str):
+    import base64
+    resp = base64.b64encode(f'{str}'.encode("utf-8"))
+    return resp.decode()

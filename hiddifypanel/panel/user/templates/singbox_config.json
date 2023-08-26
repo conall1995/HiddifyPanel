@@ -40,7 +40,8 @@
                 "domain": [
                     "{{domain}}",
                     "github.com",
-                    "githubusercontent.com"
+                    "githubusercontent.com",
+                    "{{ssh_ip}}"
                 ],
                 "server": "dns-local"
             },
@@ -94,11 +95,21 @@
         }
     ],
     "outbounds": [
+    {
+			"type": "socks",
+			"tag": "SSH+UDP",
+			"server": "127.0.0.1",
+			"server_port": 2000,
+			"version": "5",
+			"udp_over_tcp": true,
+			"network": "tcp",
+			"detour": "ssh-out"
+		},
         {
             "type": "ssh",
             "tag": "ssh-out",
             //"client_version": "{{ssh_client_version}}",
-            "server": "{{domain}}",
+            "server": "{{ssh_ip}}",
             "server_port": {{hconfigs[ConfigEnum.ssh_server_port]}},
             "user": "{{user.uuid}}",
             "private_key": "{{user.ed25519_private_key|replace('\n', '\\n')}}", //{{user.ed25519_public_key|replace('\n', '\\n')}}
@@ -124,7 +135,7 @@
     "route": {
         "auto_detect_interface": true,
         "override_android_vpn": true,
-        "final": "ssh-out",
+        "final": "SSH+UDP",
         // "geoip": {
         //             "download_url": "https://{{domain}}/{{hconfigs[ConfigEnum.proxy_path]}}/gh/malikshi/sing-box-geo/releases/latest/download/geoip.db",
         // //    "download_url": "https:\/\/github.com\/malikshi\/sing-box-geo\/releases\/latest\/download\/geoip.db",
